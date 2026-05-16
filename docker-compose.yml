@@ -1,0 +1,20 @@
+# Lokal Postgres kurulumun varsa bu dosyaya gerek yok.
+# Yoksa: docker compose up -d ile başlat.
+# .env'deki DATABASE_URL'yi şuna güncelle:
+#   postgresql://kare:kare@localhost:5432/kare_rehber?schema=public
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kare-rehber-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kare
+      POSTGRES_PASSWORD: kare
+      POSTGRES_DB: kare_rehber
+    ports:
+      - "5432:5432"
+    volumes:
+      - kare_pg_data:/var/lib/postgresql/data
+
+volumes:
+  kare_pg_data:

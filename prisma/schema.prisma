@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =====================================================
+// KULLANICILAR & ROLLER
+// =====================================================
+
+enum Rol {
+  ADMIN
+  KOORDINATOR
+  KOC
+  OGRENCI
+  VELI
+}
+
+enum KocDurumu {
+  HAVUZ
+  AKTIF
+  PASIF
+}
+
+enum BasvuruDurumu {
+  BEKLEMEDE
+  ONAYLANDI
+  REDDEDILDI
+}
+
+enum GorusmeDurumu {
+  TASLAK
+  GONDERILDI
+  ONAYLANDI
+  REDDEDILDI
+}
+
+enum SmsDurumu {
+  GONDERILDI
+  BASARISIZ
+  BEKLEMEDE
+}
+
+enum BildirimTipi {
+  MESAJ
+  GORUSME_GONDERILDI
+  GORUSME_ONAYLANDI
+  GORUSME_REDDEDILDI
+  ESLESTIRME
+  BASVURU_ONAYLANDI
+  BASVURU_REDDEDILDI
+  YENI_BASVURU
+  GECIKEN_GORUSME
+  SISTEM
+}
+
+model User {
+  id           String   @id @default(cuid())
+  ad           String
+  soyad        String
+  telefon      String   @unique
+  dogumTarihi  DateTime?
+  email        String?  @unique
+  sifreHash    String?
+  rol          Rol
+  aktif        Boolean  @default(true)
+  olusturulma  DateTime @default(now())
+  guncellenme  DateTime @updatedAt
+
+  ogrenciProfil      OgrenciProfil?
+  kocProfil          KocProfil?
+  koordinatorProfil  KoordinatorProfil?
+  veliProfil         VeliProfil?
+
+  gonderdigiMesajlar   Mesaj[]       @relation("MesajGonderen")
+  aldigiMesajlar       Mesaj[]       @relation("MesajAlici")
+  smsGonderimleri      SmsLog[]      @relation("SmsGonderen")
+  gorusmeLoglari       GorusmeLog[]
+  sistemLoglari        SistemLog[]
+  onayladigiGorusmeler Gorusme[]     @relation("GorusmeOnaylayan")
+  bildirimler          Bildirim[]
+  pushAbonelikleri     PushAbonelik[]
+
+  @@index([rol])
+  @@index([telefon])
+}
+
+model OgrenciProfil {
+  id        String        @id @default(cuid())
+  userId    String        @unique
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  il        String
+  ilce      String?
+  sinif     String?
+  okul      String?
+  veliId    String?
+  veli      VeliProfil?   @relation(fields: [veliId], references: [id])
+
+  kocEslestirmeleri         OgrenciKocEslestirme[]
+  koordinatorEslestirmeleri OgrenciKoordinatorEslestirme[]
+  gorusmeler                Gorusme[]
+
+  @@index([il])
+  @@index([veliId])
+}
+
+model KocProfil {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uzmanlik  String?
+  durum     KocDurumu  @default(HAVUZ)
+
+  ogrenciEslestirmeleri OgrenciKocEslestirme[]
+  gorusmeler            Gorusme[]
+}
+
+model KoordinatorProfil {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vakifAdi    String
+  il          String?
+
+  ogrenciEslestirmeleri OgrenciKoordinatorEslestirme[]
+
+  @@index([il])
+}
+
+model VeliProfil {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ogrenciler OgrenciProfil[]
+}
+
+// =====================================================
+// BAŞVURULAR
+// =====================================================
+
+model OgrenciKayitBasvuru {
+  id             String        @id @default(cuid())
+  ad             String
+  soyad          String
+  telefon        String
+  dogumTarihi    DateTime?
+  email          String?
+  il             String
+  ilce           String?
+  sinif          String?
+  okul           String?
+  veliAd         String?
+  veliSoyad      String?
+  veliTelefon    String?
+  notlar         String?
+  durum          BasvuruDurumu @default(BEKLEMEDE)
+  incelemeTarihi DateTime?
+  inceleyenId    String?
+  olusturulma    DateTime      @default(now())
+
+  @@index([durum])
+  @@index([il])
+}
+
+model KocOnBasvuru {
+  id             String        @id @default(cuid())
+  ad             String
+  soyad          String
+  telefon        String
+  dogumTarihi    DateTime?
+  email          String?
+  uzmanlik       String?
+  notlar         String?
+  durum          BasvuruDurumu @default(BEKLEMEDE)
+  incelemeTarihi DateTime?
+  inceleyenId    String?
+  olusturulma    DateTime      @default(now())
+
+  @@index([durum])
+}
+
+// =====================================================
+// EŞLEŞTİRMELER
+// =====================================================
+
+model OgrenciKocEslestirme {
+  id          String        @id @default(cuid())
+  ogrenciId   String
+  ogrenci     OgrenciProfil @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  kocId       String
+  koc         KocProfil     @relation(fields: [kocId], references: [id], onDelete: Cascade)
+  baslangic   DateTime      @default(now())
+  bitis       DateTime?
+  aktif       Boolean       @default(true)
+  olusturulma DateTime      @default(now())
+
+  @@unique([ogrenciId, kocId, aktif])
+  @@index([aktif])
+}
+
+model OgrenciKoordinatorEslestirme {
+  id            String            @id @default(cuid())
+  ogrenciId     String
+  ogrenci       OgrenciProfil     @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  koordinatorId String
+  koordinator   KoordinatorProfil @relation(fields: [koordinatorId], references: [id], onDelete: Cascade)
+  baslangic     DateTime          @default(now())
+  aktif         Boolean           @default(true)
+  olusturulma   DateTime          @default(now())
+
+  @@unique([ogrenciId, koordinatorId, aktif])
+  @@index([aktif])
+}
+
+// =====================================================
+// GÖRÜŞMELER
+// =====================================================
+
+model Gorusme {
+  id            String        @id @default(cuid())
+  kocId         String
+  koc           KocProfil     @relation(fields: [kocId], references: [id])
+  ogrenciId     String
+  ogrenci       OgrenciProfil @relation(fields: [ogrenciId], references: [id])
+  tarih         DateTime
+  konu          String?
+  not           String
+  ilerlemePuani Int?
+  durum         GorusmeDurumu @default(GONDERILDI)
+  onaylayanId   String?
+  onaylayan     User?         @relation("GorusmeOnaylayan", fields: [onaylayanId], references: [id])
+  onayTarihi    DateTime?
+  redSebebi     String?
+  olusturulma   DateTime      @default(now())
+  guncellenme   DateTime      @updatedAt
+
+  loglar GorusmeLog[]
+
+  @@index([kocId])
+  @@index([ogrenciId])
+  @@index([durum])
+  @@index([tarih])
+}
+
+model GorusmeLog {
+  id           String   @id @default(cuid())
+  gorusmeId    String
+  gorusme      Gorusme  @relation(fields: [gorusmeId], references: [id], onDelete: Cascade)
+  degistirenId String
+  degistiren   User     @relation(fields: [degistirenId], references: [id])
+  eskiVeri     Json?
+  yeniVeri     Json?
+  aciklama     String?
+  tarih        DateTime @default(now())
+
+  @@index([gorusmeId])
+}
+
+// =====================================================
+// MESAJLAŞMA
+// =====================================================
+
+model Mesaj {
+  id           String    @id @default(cuid())
+  gondericiId  String
+  gonderici    User      @relation("MesajGonderen", fields: [gondericiId], references: [id])
+  aliciId      String
+  alici        User      @relation("MesajAlici", fields: [aliciId], references: [id])
+  konu         String?
+  icerik       String
+  okundu       Boolean   @default(false)
+  okunmaTarihi DateTime?
+  tarih        DateTime  @default(now())
+
+  @@index([gondericiId])
+  @@index([aliciId])
+  @@index([okundu])
+}
+
+// =====================================================
+// SMS & LOG
+// =====================================================
+
+model SmsLog {
+  id             String    @id @default(cuid())
+  aliciTel       String
+  aliciUserId    String?
+  icerik         String
+  durum          SmsDurumu @default(BEKLEMEDE)
+  saglayici      String
+  saglayiciYanit String?
+  hataMesaji     String?
+  gonderenId     String?
+  gonderen       User?     @relation("SmsGonderen", fields: [gonderenId], references: [id])
+  tarih          DateTime  @default(now())
+
+  @@index([aliciTel])
+  @@index([durum])
+  @@index([tarih])
+}
+
+model SistemLog {
+  id      String   @id @default(cuid())
+  actorId String?
+  actor   User?    @relation(fields: [actorId], references: [id])
+  action  String
+  target  String?
+  payload Json?
+  ip      String?
+  tarih   DateTime @default(now())
+
+  @@index([action])
+  @@index([actorId])
+  @@index([tarih])
+}
+
+// =====================================================
+// BİLDİRİMLER
+// =====================================================
+
+model Bildirim {
+  id           String       @id @default(cuid())
+  kullaniciId  String
+  kullanici    User         @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  tip          BildirimTipi
+  baslik       String
+  icerik       String
+  link         String?
+  okundu       Boolean      @default(false)
+  okunmaTarihi DateTime?
+  tarih        DateTime     @default(now())
+
+  @@index([kullaniciId, okundu])
+  @@index([kullaniciId, tarih])
+}
+
+model PushAbonelik {
+  id          String   @id @default(cuid())
+  kullaniciId String
+  kullanici   User     @relation(fields: [kullaniciId], references: [id], onDelete: Cascade)
+  endpoint    String   @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  olusturulma DateTime @default(now())
+  sonKullanim DateTime @default(now())
+
+  @@index([kullaniciId])
+}
+
+// =====================================================
+// AYARLAR
+// =====================================================
+
+model Ayar {
+  anahtar     String   @id
+  deger       String
+  aciklama    String?
+  guncellenme DateTime @updatedAt
+}
